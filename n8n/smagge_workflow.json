@@ -1,0 +1,179 @@
+{
+  "name": "SMAGGE Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "smagge-trigger",
+      "parameters": {
+        "path": "smagge-trigger",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson"
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1-5" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 9AM Trigger (Mon-Fri)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/status",
+        "options": {}
+      },
+      "id": "health-check",
+      "name": "Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 390]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "ok"
+            }
+          ]
+        }
+      },
+      "id": "check-status",
+      "name": "Server OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 390]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/run",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "industry",  "value": "SaaS" },
+            { "name": "job_title", "value": "Head of Growth" },
+            { "name": "location",  "value": "United States" },
+            { "name": "limit",     "value": "5" },
+            { "name": "trigger",   "value": "n8n_webhook" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "trigger-pipeline",
+      "name": "Trigger SMAGGE Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "waitBetweenTries": 30000,
+        "maxTries": 10,
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.runs[0].status }}",
+              "operation": "equals",
+              "value2": "completed"
+            }
+          ]
+        },
+        "pollTimes": {
+          "item": [{ "mode": "everyX", "value": 30, "unit": "seconds" }]
+        }
+      },
+      "id": "wait-complete",
+      "name": "Wait for Completion",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/leads?status=approved&limit=20",
+        "options": {}
+      },
+      "id": "fetch-results",
+      "name": "Fetch Approved Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $input.first().json.leads || [];\nconst approved = leads.filter(l => l.status === 'approved');\nconst rejected = leads.filter(l => l.status === 'rejected');\n\nreturn [{\n  json: {\n    summary: {\n      total: leads.length,\n      approved: approved.length,\n      rejected: rejected.length,\n      avg_security_score: leads.length > 0\n        ? Math.round(leads.reduce((s, l) => s + (l.security_score || 0), 0) / leads.length)\n        : 0\n    },\n    approved_leads: approved\n  }\n}];"
+      },
+      "id": "summarise",
+      "name": "Summarise Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "message": "SMAGGE API is offline. Pipeline not triggered.",
+        "options": {}
+      },
+      "id": "server-offline",
+      "name": "Log Server Offline",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 480]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Health Check", "type": "main", "index": 0 }]]
+    },
+    "Daily 9AM Trigger (Mon-Fri)": {
+      "main": [[{ "node": "Health Check", "type": "main", "index": 0 }]]
+    },
+    "Health Check": {
+      "main": [[{ "node": "Server OK?", "type": "main", "index": 0 }]]
+    },
+    "Server OK?": {
+      "main": [
+        [{ "node": "Trigger SMAGGE Pipeline", "type": "main", "index": 0 }],
+        [{ "node": "Log Server Offline",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger SMAGGE Pipeline": {
+      "main": [[{ "node": "Fetch Approved Leads", "type": "main", "index": 0 }]]
+    },
+    "Fetch Approved Leads": {
+      "main": [[{ "node": "Summarise Results", "type": "main", "index": 0 }]]
+    },
+    "Summarise Results": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,23 @@
+# ─── SMAGGE Agent Configuration ──────────────────────────────────────────────
+# Tune agent behaviour here without touching Python files
+
+scout:
+  max_iter: 3
+  verbose: true
+  allow_delegation: false
+
+analyst:
+  max_iter: 5
+  verbose: true
+  allow_delegation: false
+
+writer:
+  max_iter: 3
+  verbose: true
+  allow_delegation: false
+
+# ─── Pipeline Defaults ────────────────────────────────────────────────────────
+pipeline:
+  default_limit: 5
+  process: sequential          # sequential | hierarchical (Phase 3+)
+  log_level: INFO

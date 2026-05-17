@@ -1,0 +1,131 @@
+name: SMAGGE CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ── Lint & Import Check ──────────────────────────────────────────────────────
+  lint:
+    name: Lint & Import Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install flake8
+          pip install python-dotenv pydantic loguru rich \
+                      fastapi uvicorn httpx requests \
+                      psycopg2-binary sqlalchemy
+
+      - name: Flake8 — syntax errors and undefined names only
+        run: |
+          flake8 . \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --exclude=venv,__pycache__,.github,data \
+            --show-source \
+            --statistics
+
+      - name: Check core module imports
+        run: |
+          python -c "from security.checks.pii_check import PIICheck; print('✓ PIICheck')"
+          python -c "from security.checks.injection_check import InjectionCheck; print('✓ InjectionCheck')"
+          python -c "from security.scorer import SecurityReport, SecurityScorer; print('✓ SecurityScorer')"
+          python -c "from feedback.loop import FeedbackLoop; print('✓ FeedbackLoop')"
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: smagge_db
+          POSTGRES_USER: smagge
+          POSTGRES_PASSWORD: smagge_secret
+          OLLAMA_MODEL: llama3.2
+
+  # ── Security Layer Unit Tests ─────────────────────────────────────────────────
+  security-tests:
+    name: Security Layer Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest python-dotenv pydantic loguru rich httpx requests
+
+      - name: Run security unit tests
+        run: pytest tests/ -v --tb=short
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          LEAD_SOURCE: mock
+          OLLAMA_MODEL: llama3.2
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: smagge_db
+          POSTGRES_USER: smagge
+          POSTGRES_PASSWORD: smagge_secret
+
+  # ── API Smoke Test ────────────────────────────────────────────────────────────
+  api-smoke:
+    name: FastAPI Smoke Test
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install API dependencies
+        run: |
+          pip install --upgrade pip
+          pip install fastapi uvicorn httpx \
+                      python-dotenv pydantic loguru \
+                      psycopg2-binary sqlalchemy requests
+
+      - name: FastAPI /status smoke test
+        run: |
+          python -c "
+          import sys, os
+          sys.path.insert(0, '.')
+          os.environ.setdefault('POSTGRES_HOST', 'localhost')
+          os.environ.setdefault('POSTGRES_PORT', '5432')
+          os.environ.setdefault('POSTGRES_DB', 'smagge_db')
+          os.environ.setdefault('POSTGRES_USER', 'smagge')
+          os.environ.setdefault('POSTGRES_PASSWORD', 'smagge_secret')
+          os.environ.setdefault('OLLAMA_MODEL', 'llama3.2')
+          from fastapi.testclient import TestClient
+          from api.server import app
+          client = TestClient(app, raise_server_exceptions=False)
+          r = client.get('/status')
+          assert r.status_code == 200, f'Expected 200, got {r.status_code}: {r.text}'
+          print('✓ GET /status →', r.json())
+          "
+        env:
+          PYTHONPATH: ${{ github.workspace }}

@@ -1,0 +1,41 @@
+# ─── SMAGGE NeMo Guardrails — Colang Flows ───────────────────────────────────
+# These flows define the security rules enforced by the guardrail layer.
+
+# ── Input Rails ───────────────────────────────────────────────────────────────
+
+define flow check prompt injection
+  user ...
+  $injection = execute check_injection(text=$user_message)
+  if $injection.detected
+    bot say "Message blocked: prompt injection attempt detected."
+    stop
+
+define flow check pii in input
+  user ...
+  $pii = execute check_pii(text=$user_message)
+  if $pii.detected
+    bot say "Message blocked: PII detected in input. Please remove personal identifiers."
+    stop
+
+# ── Output Rails ──────────────────────────────────────────────────────────────
+
+define flow check pii in output
+  bot ...
+  $pii = execute check_pii(text=$bot_message)
+  if $pii.detected
+    bot say "Output blocked: PII detected. Rewriting without personal identifiers."
+    stop
+
+define flow check hallucination
+  bot ...
+  $hallucination = execute check_hallucination(text=$bot_message)
+  if $hallucination.level == "major"
+    bot say "Output blocked: unverifiable claims detected. Rewriting with verified facts only."
+    stop
+
+define flow check tone
+  bot ...
+  $tone = execute check_tone(text=$bot_message)
+  if $tone.score < 5
+    bot say "Output blocked: tone too salesy. Rewriting in a more professional voice."
+    stop

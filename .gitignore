@@ -1,0 +1,45 @@
+# ─── Environment & Secrets ───────────────────────────────────────────────────
+.env
+*.env.local
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Pytest ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ─── Project-specific ────────────────────────────────────────────────────────
+# Don't commit uploaded files or temp data
+data/uploads/
+*.log
+error.docx
+Copy of*.xlsx
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+# Local docker volumes are managed by docker-compose, not git

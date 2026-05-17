@@ -1,0 +1,61 @@
+version: '3.8'
+
+# SMAGGE — Sovereign Multi-Agent Growth & Governance Engine
+# Phase 1: Core infrastructure — PostgreSQL (Supabase-compatible) + n8n
+
+services:
+
+  # ─── Database (Supabase-compatible PostgreSQL) ──────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: smagge_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smagge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smagge_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-smagge_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smagge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── n8n Workflow Orchestrator ───────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: smagge_n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-smagge_db}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-smagge}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-smagge_secret}
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin123}
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+# ─── Usage ───────────────────────────────────────────────────────────────────
+# 1. Copy .env.example to .env and fill in your values
+# 2. Run: docker-compose up -d
+# 3. n8n dashboard: http://localhost:5678  (admin / admin123)
+# 4. PostgreSQL:    localhost:5432         (smagge / smagge_secret)
